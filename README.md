@@ -1,1 +1,2 @@
-# tools.lograph
+# Generate graphs from log
+
