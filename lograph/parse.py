@@ -3,6 +3,9 @@ import logging
 import os
 import re
 from abc import abstractmethod
+from collections import OrderedDict
+
+import itertools
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +14,14 @@ class Sample:
     def __init__(self, key, value):
         self.key = key
         self.value = value
+
+
+class MeanSample(Sample):
+    def __init__(self, key, mean, min=None, max=None, std=0):
+        Sample.__init__(self, key, mean)
+        self.min = min or mean
+        self.max = max or mean
+        self.std = std
 
 
 class Series:
@@ -23,9 +34,13 @@ class Series:
         except TypeError:
             self.dimension = (unicode(dimension),)
         self.samples = []
+        self.subordinates_series = []
 
-    def append(self, key, value):
-        self.samples.append(Sample(key, value))
+    def append(self, key, sample):
+        if isinstance(sample, Sample):
+            self.samples.append(sample)
+        else:
+            self.samples.append(Sample(key, sample))
 
     def keys(self):
         return (r.key for r in self.samples)
@@ -35,10 +50,12 @@ class Series:
 
     def sort(self):
         self.samples.sort(key=lambda x: x.key)
+        return self
 
     def __add__(self, other):
         assert other.dimension == self.dimension and other.unit == self.unit
-        self.samples.append(other.records)
+        self.samples += other.samples
+        return self
 
     def __len__(self):
         return len(self.samples)
@@ -57,11 +74,10 @@ class LogParser:
         return (Series(['notinitialized'], unit='unknown'),)
 
 
-class Data:
+class SeriesSet:
     def __init__(self):
-        self.series_set = {}
+        self.series_set = OrderedDict()
         self.sources = []
-        self._filter = None
 
     def load(self, parsers, source_path="./"):
         if source_path:
@@ -72,6 +88,10 @@ class Data:
                 return tuple(self.load_from_file(source_path, parsers=parsers))
 
     def load_from_file(self, filepath, parsers):
+        if os.path.isdir(filepath):
+            logger.info("Target path is directory: %s", filepath)
+            return
+
         for parser in parsers:
             try:
                 series_list = parser.parse_file(filepath)
@@ -93,13 +113,11 @@ class Data:
             series.sort()
         else:
             # Actually I better copy series as new instance but it's unnecessary now
-            self.series_set[new_series.dimension] = new_series
-            new_series.sort()
+            self.series_set[new_series.dimension] = new_series.sort()
 
     def filter(self, filter_func):
-        self._filter = filter_func
+        return (x for x in self.series_set.values() if x is None or filter_func(x))
 
     def __iter__(self):
         for x in self.series_set.values():
-            if self._filter is None or self._filter(x):
-                yield x
+            yield x

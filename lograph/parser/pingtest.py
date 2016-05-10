@@ -3,7 +3,7 @@ import logging
 import os
 import re
 
-from lograph.parse import LogParser, Series, UnsupportedLogError
+from lograph.parse import LogParser, Series, UnsupportedLogError, MeanSample
 from lograph.parser.erftest import RE_PATTERN_ERFTEST_TIME
 
 logger = logging.getLogger(__name__)
@@ -23,10 +23,7 @@ class PingTestLogParser(LogParser):
 
         dimension = filename.strip('.log').split('_')
         loss_series = Series(dimension + ['loss'], unit='%', is_continuous=False)
-        min_series = Series(dimension + ['min'], unit='ms')
-        avg_series = Series(dimension + ['avg'], unit='ms')
-        max_series = Series(dimension + ['max'], unit='ms')
-        mdev_series = Series(dimension + ['mdev'], unit='ms')
+        rtt_series = Series(dimension + ['rtt'], unit='ms')
 
         def feed_loss_series(index, line):
             m = RE_PATTERN_PINGTEST_PACKETS.match(line)
@@ -41,10 +38,7 @@ class PingTestLogParser(LogParser):
         def feed_stat_series(index, line):
             m = RE_PATTERN_PINGTEST_RTT.match(line)
             if m:
-                min_series.append(index, float(m.group('min')))
-                avg_series.append(index, float(m.group('avg')))
-                max_series.append(index, float(m.group('max')))
-                mdev_series.append(index, float(m.group('mdev')))
+                rtt_series.append(index, MeanSample(index, *(float(m.group(k)) for k in ['avg', 'min', 'max', 'mdev'])))
                 return True
             else:
                 return False
@@ -57,8 +51,7 @@ class PingTestLogParser(LogParser):
                     if feed_loss_series(time_index, l):
                         pass
                     elif feed_stat_series(time_index, l):
-                        # This expression is last one of segment
-                        time_index = None
+                        time_index = None  # This expression is last one of segment
                     else:
                         pass  # Just meaningless line
                 else:
@@ -66,4 +59,6 @@ class PingTestLogParser(LogParser):
                     if m:
                         time_index = datetime.datetime.fromtimestamp(long(m.group('timestamp')))
 
-        return (loss_series, min_series, avg_series, max_series, mdev_series)
+        rtt_series.subordinates_series.append(loss_series)
+
+        return (rtt_series,)
