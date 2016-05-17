@@ -61,7 +61,7 @@ class Series:
         return len(self.samples)
 
     def __unicode__(self):
-        return "%s (%d records)" % (unicode(self.dimension), len(self))
+        return u"%s (%d records)" % (unicode(self.dimension), len(self))
 
 
 class UnsupportedLogError(Exception):

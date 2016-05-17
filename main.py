@@ -20,9 +20,11 @@ parser.add_option("-s", "--size", dest="size", metavar="SIZE", type="int", nargs
                        "You can use 'void' for repository to avoid actual distribution.")
 
 
+def format_title(s):
+    return s.replace('_', ' ') if s else None
+
 
 def main():
-    data = SeriesSet()
 
     (options, args) = parser.parse_args()
 
@@ -32,27 +34,27 @@ def main():
         dirs = ('./log/',)
 
     for d in dirs:
+        data = SeriesSet()
         data.load(source_path=d, parsers=[ErfTestLogParser(), PingTestLogParser(), DownloadTestLogParser()])
         basename = os.path.basename(os.path.abspath(d))
 
-        series_list = list(data.filter(lambda s: 'pingtest' in s.dimension))
+        series_list = list(data.filter(lambda s: 'pingtest' in s.dimension and 'rtt' in s.dimension))
         if series_list:
             title = "%s_pingtest" % basename
-            for s in (s for s in series_list if not s.is_continuous):
-                s.priority = -1
-            plot_series(title.replace('_', ' '), series_list).savefig("%s.png" % title, bbox_inches="tight")
+            scales = {'ms': (0, 500)}
+            plot_series(format_title(title), series_list, scales=scales).savefig("%s.png" % title, bbox_inches="tight")
 
         series_list = list(data.filter(lambda s: 'erftest' in s.dimension))
         if series_list:
             title = "%s_erftest" % basename
-            plot_series(title.replace('_', ' '), series_list).savefig("%s.png" % title, bbox_inches="tight")
+            plot_series(format_title(title), series_list).savefig("%s.png" % title, bbox_inches="tight")
 
-        series_list = list(data.filter(lambda s: ('dntest' in s.dimension) and ('1266541' in s.dimension)))
+
+        series_list = list(data.filter(lambda s: ('dntest' in s.dimension) and ('1200K' in s.dimension)))
         if series_list:
             title = "%s_dntest" % basename
-            for s in (s for s in series_list if not s.is_continuous):
-                s.priority = -1
-            plot_series(title.replace('_', ' '), series_list).savefig("%s.png" % title, bbox_inches="tight")
+            scales = {'seconds': (0, 200)}
+            plot_series(format_title(title), series_list, scales=scales).savefig("%s.png" % title, bbox_inches="tight")
 
 
 if __name__ == '__main__':

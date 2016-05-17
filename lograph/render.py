@@ -85,6 +85,7 @@ class RightAdditivePlot:
                                 list(getattr(s, 'max', s.value) for s in series.samples),
                                 facecolor=kwargs.get('color'), edgecolor='none', alpha=0.5)
         else:
+            draw_args.setdefault('marker', '.')
             art = ax.scatter(keys, values, **draw_args)
 
         for s in series.subordinates_series:
@@ -122,13 +123,13 @@ def get_default_color(series, rank=None):
     colour = getattr(series, 'color', None) or getattr(series, 'colour', None)
     if colour:
         return colour
-    elif rank and len(tableau20) > rank:
+    elif isinstance(rank, int) and len(tableau20) > rank:
         return tableau20[rank][0]
     else:
         return (random.randrange(1,256)/255., random.randrange(1,256)/255., random.randrange(1,256)/255.)
 
 
-def plot_series(title, series_list, figsize=None):
+def plot_series(title, series_list, figsize=None, scales={}):
     if not figsize:
         end_date = start_date = None
         for s in series_list:
@@ -149,6 +150,10 @@ def plot_series(title, series_list, figsize=None):
     for unit, count in units:
         ax = plot.get_ax(unit)
         ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(si_prefix_func))
+        limits = scales.get(unit) if scales else None
+        if limits:
+            ax.set_ylim(limits)
+
     plot.get_ax(units[0][0]).grid(True)
 
     for rank, series in enumerate(series_list):
