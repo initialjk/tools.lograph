@@ -42,19 +42,54 @@ def main():
         if series_list:
             title = "%s_pingtest" % basename
             scales = {'ms': (0, 500)}
-            plot_series(format_title(title), series_list, scales=scales).savefig("%s.png" % title, bbox_inches="tight")
+
+            offset = 0
+            for ss in itertools.chain(*(s.subordinates_series for s in series_list if s.subordinates_series)):
+                if 'loss' in ss.dimension:
+                    offset += 10
+                    for sample in ss.samples:
+                        sample.value = offset
+
+            try:
+                plot_series(format_title(title), series_list, scales=scales).savefig("%s.png" % title, bbox_inches="tight")
+            except ValueError as e:
+                print("Can't wrote figure for '%s'" % title, e)
 
         series_list = list(data.filter(lambda s: 'erftest' in s.dimension))
         if series_list:
             title = "%s_erftest" % basename
-            plot_series(format_title(title), series_list).savefig("%s.png" % title, bbox_inches="tight")
-
+            try:
+                plot_series(format_title(title), series_list).savefig("%s.png" % title, bbox_inches="tight")
+            except ValueError as e:
+                print("Can't wrote figure for '%s'" % title, e)
 
         series_list = list(data.filter(lambda s: ('dntest' in s.dimension) and ('1200K' in s.dimension)))
         if series_list:
             title = "%s_dntest" % basename
             scales = {'seconds': (0, 200)}
-            plot_series(format_title(title), series_list, scales=scales).savefig("%s.png" % title, bbox_inches="tight")
+
+            offset = 150
+            for ss in itertools.chain(*(s.subordinates_series for s in series_list if s.subordinates_series)):
+                if 'error' in ss.dimension:
+                    offset += 10
+                    ss.unit = 'seconds'
+                    for sample in ss.samples:
+                        sample.value = offset
+
+            try:
+                plot_series(format_title(title), series_list, scales=scales).savefig("%s.png" % title, bbox_inches="tight")
+            except ValueError as e:
+                print("Can't wrote figure for '%s'" % title, e)
+
+        series_list = list(data.filter(lambda s: ('dntest' in s.dimension) and ('0K' in s.dimension)))
+        if series_list:
+            title = "%s_dntest_small" % basename
+            scales = {'seconds': (0, 20)}
+
+            try:
+                plot_series(format_title(title), series_list, scales=scales).savefig("%s.png" % title, bbox_inches="tight")
+            except ValueError as e:
+                print("Can't wrote figure for '%s'" % title, e)
 
 
 if __name__ == '__main__':

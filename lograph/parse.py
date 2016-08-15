@@ -37,6 +37,10 @@ class Series:
         self.subordinates_series = []
 
     def append(self, key, sample):
+        # Temp
+        #if key >= datetime.datetime(2016, 5, 5):
+        #    return
+
         if isinstance(sample, Sample):
             self.samples.append(sample)
         else:

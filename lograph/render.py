@@ -134,14 +134,17 @@ def plot_series(title, series_list, figsize=None, scales={}):
         end_date = start_date = None
         for s in series_list:
             keys = list(s.keys())
-            if not start_date or start_date < keys[0]:
-                start_date = keys[0]
-            if not end_date or end_date < keys[-1]:
-                end_date = keys[-1]
+            if keys:
+                if not start_date or start_date < keys[0]:
+                    start_date = keys[0]
+                if not end_date or end_date < keys[-1]:
+                    end_date = keys[-1]
+            else:
+                print("Empty series", title, s.__dict__)
         if end_date and start_date:
             figsize = ((end_date - start_date).days * 20, 14)
         else:
-            figsize = (12, 8)
+            raise ValueError("No data", title, series_list)
 
     plot = RightAdditivePlot(figsize=figsize)
 

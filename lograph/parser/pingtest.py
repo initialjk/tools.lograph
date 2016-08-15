@@ -37,11 +37,14 @@ def arrange_loss_event_to_rtt(rtt_series, loss_series):
             steps = (s.sent - s.received) + 1
             left_key = keys[i - 1]
             left_value = values[i - 1]
-            step_key = (keys[i] - left_key) / steps
-            step_value = (values[i] - left_value) / steps
+            try:
+                step_key = (keys[i] - left_key) / steps
+                step_value = (values[i] - left_value) / steps
 
-            for n in xrange(1, steps):
-                arranged_series.append(left_key + (step_key * n), left_value + (step_value * n))
+                for n in xrange(1, steps):
+                    arranged_series.append(left_key + (step_key * n), left_value + (step_value * n))
+            except IndexError:  # Last item
+                arranged_series.append(left_key, left_value)
 
     return arranged_series
 
@@ -60,7 +63,7 @@ class PingTestLogParser(LogParser):
             m = RE_PATTERN_PINGTEST_PACKETS.match(line)
             if m:
                 loss_sample = LossSample(index, m.group('loss_percent'), m.group('sent'), m.group('received'))
-                if loss_sample.value and loss_sample.value > 0:
+                if loss_sample.value and loss_sample.value > 20:
                     loss_series.append(index, loss_sample)
                 return True
             else:
