@@ -68,6 +68,19 @@ class Series:
         return u"%s (%d records)" % (unicode(self.dimension), len(self))
 
 
+class SeriesMap(dict):
+    def __init__(self, dimension, **kwargs):
+        super(SeriesMap, self).__init__()
+        self.base_dimension = dimension
+        self.kwargs = kwargs
+
+    def __getitem__(self, item):
+        series = self.get(item)
+        if series is None:
+            self[item] = series = Series(self.base_dimension + [item,], **self.kwargs)
+        return series
+
+
 class UnsupportedLogError(Exception):
     pass
 
