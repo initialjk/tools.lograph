@@ -1,5 +1,5 @@
 import random
-from collections import Counter
+from collections import Counter, deque
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker
@@ -126,30 +126,34 @@ def get_default_color(series, rank=None):
     elif isinstance(rank, int) and len(tableau20) > rank:
         return tableau20[rank][0]
     else:
-        return (random.randrange(1,256)/255., random.randrange(1,256)/255., random.randrange(1,256)/255.)
+        return random.randrange(1, 256) / 255., random.randrange(1, 256) / 255., random.randrange(1, 256) / 255.
 
 
-def plot_series(title, series_list, figsize=None, scales={}):
+def plot_series(title, series_list, figsize=None, scales={}, legend={'loc': 0}):
     if not figsize:
         end_date = start_date = None
         for s in series_list:
-            keys = list(s.keys())
-            if keys:
-                if not start_date or start_date < keys[0]:
-                    start_date = keys[0]
-                if not end_date or end_date < keys[-1]:
-                    end_date = keys[-1]
+            keys = s.keys()
+            key_first = next(keys, None)
+            if key_first:
+                key_last = next((k for k in deque(keys, maxlen=1)), key_first)
+                if not start_date or start_date > key_first:
+                    start_date = key_first
+                if end_date is None or end_date < key_last:
+                    end_date = key_last
             else:
                 print("Empty series", title, s.__dict__)
         if end_date and start_date:
-            figsize = ((end_date - start_date).days * 20, 14)
+            figsize = (((end_date - start_date).days + 1) * 20, 14)
         else:
             raise ValueError("No data", title, series_list)
 
     plot = RightAdditivePlot(figsize=figsize)
 
     # Preponderance unit first
-    units = sorted(Counter(x.unit for x in series_list).iteritems(), key=lambda (k, v): v, reverse=True)
+    all_subordinates_series = list(s for ss in series_list for s in ss.subordinates_series)
+    all_units = (x.unit for sl in (series_list, all_subordinates_series) for x in sl)
+    units = sorted(Counter(all_units).iteritems(), key=lambda (k, v): v, reverse=True)
     for unit, count in units:
         ax = plot.get_ax(unit)
         ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(si_prefix_func))

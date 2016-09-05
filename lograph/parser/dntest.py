@@ -16,7 +16,7 @@ RE_PATTERN_DNTEST_PROGRESS = re.compile(
 RE_PATTERN_DNTEST_FINISHED = re.compile(
     r'^(?P<time>\d+-\d+-\d+\s+\d+:\d+:\d+)\s*[(](?P<bps>\d+[.]?\d*)\s*(?P<unit>[/A-Za-z]+)[)]\s*-\s*\xe2\x80\x9c(?P<file>.*)\xe2\x80\x9d\s*(?P<status>\S+)\s*\[(?P<trans>\d+)/(?P<size>\d+)\].*')
 RE_PATTERN_DNTEST_RESULT = re.compile(
-    r'^(?P<total_percent>\d+)\s+(?P<total>(?P<total_num>\d+)(?P<total_unit>[a-z]?))\s+'
+    r'^\s*(?P<total_percent>\d+)\s+(?P<total>(?P<total_num>\d+)(?P<total_unit>[a-z]?))\s+'
     r'(?P<recv_percent>\d+)\s+(?P<recv>(?P<recv_num>\d+)(?P<recv_unit>[a-z]?))\s+'
     r'(?P<xferd_percent>\d+)\s+(?P<xferd>\d+)\s+'
     r'(?P<download_speed>(?P<download_speed_num>\d+)(?P<download_speed_unit>[a-z]?))\s+'
@@ -87,15 +87,14 @@ class DownloadTestParser(object):
         m = RE_PATTERN_DNTEST_RESULT.match(l)
         if m:
             progress_percent = m.group('total_percent')
+            self.cur_block = m.group('total')
+
             if progress_percent == '100':
-                self.cur_block = m.group('total')
                 self.last_bps = normalize_bps(m.group('download_speed_num'), m.group('download_speed_unit'))
                 spent_time = timedelta(m.group('time_spent'))
                 event_time = self.test_time + spent_time
                 series = self.series_map_speed[self.cur_block]
                 #series.append(self.test_time, self.last_bps)
-                series.append(event_time, self.last_bps)
-
                 series.append(event_time, self.last_bps)
 
                 series = self.series_map_elapsed[self.cur_block]
@@ -131,7 +130,6 @@ class DownloadTestParser(object):
 
         m = RE_PATTERN_DNTEST_ERROR.match(l)
         if m:
-            logger.info("FAILED: %s", l)
             event_time = self.test_time
             er = m.group('error_reason')
             em = RE_PATTERN_DNTEST_ERROR_TIMEOUT.match(er)
