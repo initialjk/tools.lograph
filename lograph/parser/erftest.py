@@ -20,6 +20,19 @@ class StraySample(object):
         self.line = line
 
 
+def normalize_bps(bps, unit):
+    bps = float(bps or 0) * 8
+    if unit == 'Kbits/sec':
+        bps *= 1024
+    elif unit == 'Mbits/sec':
+        bps *= (1024 * 1024)
+    elif unit == 'Gbits/sec':
+        bps *= (1024 * 1024 * 1024)
+    elif unit:
+        logger.warn("Invalid unit format '%s'. Use figure %s by literal", unit, bps)
+    return bps
+
+
 class ErfTestLogParser(LogParser):
     def parse_file(self, filepath):
         filename = os.path.basename(filepath)
@@ -52,16 +65,7 @@ class ErfTestLogParser(LogParser):
 
                 m = RE_PATTERN_ERFTEST_BANDWIDTH.match(l)
                 if m:
-                    bps = float(m.group('bps'))
-                    unit = m.group('bps_unit')
-                    if unit == 'Kbits/sec':
-                        bps *= 1024
-                    elif unit == 'Mbits/sec':
-                        bps *= (1024 * 1024)
-                    elif unit == 'Gbits/sec':
-                        bps *= (1024 * 1024 * 1024)
-                    elif unit:
-                        logger.warn("Invalid unit format '%s'. Use figure %s by literal", unit, bps)
+                    bps = normalize_bps(m.group('bps'), m.group('bps_unit'))
 
                     if time_index:
                         series.append(time_index, bps)
