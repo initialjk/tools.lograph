@@ -6,6 +6,8 @@ import sys
 import traceback
 
 import geoip2.database
+import itertools
+from geoip2.errors import AddressNotFoundError
 
 from lograph.parse import LogParser, SeriesMap
 
@@ -28,31 +30,38 @@ RE_PATTERN_TCPDUMP_HEADER = re.compile(
 def strptime(timestr):
     return datetime.datetime.strptime(timestr, '%H:%M:%S.%f').time()
 
+
 class TcpDumpGroupCountParser(object):
     default_interval = 60
-    def __init__(self, interval = None):
+    def __init__(self, interval = None, func_is_server_addr=lambda x: x and x.startswith('10.0.')):
         self.interval = interval or self.default_interval
+        self.is_server_addr = func_is_server_addr
         self.sample_map_dict = dict()
-        self.last_time = datetime.datetime.utcnow()
-        self.day = datetime.date.today()
+        self.last_time = datetime.time()
+        self.day = datetime.datetime(2016, 8, 29)
 
     def feed(self, l):
         m = RE_PATTERN_TCPDUMP_HEADER.match(l)
         if m is None:
             raise ValueError("Incorrect format")
 
-        if m.group('src_host').startswith('10.0.98'):
-            item_name = 's2c:' + m.group('src_port')
-        elif m.group('dst_host').startswith('10.0.98'):
-            item_name = 's2c:' + m.group('src_port')
+        if self.is_server_addr(m.group('src_host')):
+            item_name = m.group('src_port')
+        elif self.is_server_addr(m.group('dst_host')):
+            item_name = m.group('dst_port')
         else:
-            item_name = 'stray'
+            return None
+
+        if item_name == 'pnbs':
+            item_name = '6124'
 
         flags = m.group('flags')
         if 'F' in flags:
             item_name += ":FIN"
         elif 'R' in flags:
             item_name += ":RST"
+        else:
+            return None
 
         try:
             sample_map = self.sample_map_dict[item_name]
@@ -71,23 +80,47 @@ class TcpDumpGroupCountParser(object):
         return m
 
 
-class TcpDumpRegionalGroupCountParser(object):
-    default_interval = 60
-    def __init__(self, interval = None):
-        self.interval = interval or self.default_interval
-        self.sample_map_dict = dict()
-        self.last_time = datetime.datetime.utcnow()
-        self.day = datetime.date.today()
-
+class TcpDumpRegionalGroupCountParser(TcpDumpGroupCountParser):
     def feed(self, l):
         m = RE_PATTERN_TCPDUMP_HEADER.match(l)
         if m is None:
             raise ValueError("Incorrect format")
 
-        if not m.group('src_host').startswith('10.0.98'):
+        if self.is_server_addr(m.group('src_host')):
+            host = m.group('dst_host')
+            port = m.group('src_port')
+        elif self.is_server_addr(m.group('dst_host')):
+            host = m.group('src_host')
+            port = m.group('dst_port')
+        else:
             return None
 
-        item_name = "%s:%s" % (m.group('src_port'), reader.city(m.group('dst_host')).city)
+        if port == 'pnbs':
+            port = '6124'
+        elif port == 'ssh':
+            return None
+        else:
+            return None
+
+        flags = m.group('flags')
+        if 'F' in flags:
+            flag = "FIN"
+            return None
+        elif 'R' in flags:
+            flag = "RST"
+        elif 'S' in flags:
+            flag = "SYN"
+            return None
+        else:
+            return None
+
+        try:
+            city = reader.city(host).country.name or 'unknown'
+        except AddressNotFoundError:
+            city = "unknown"
+
+        #item_name = ':'.join((port, flag, city,))
+        item_name = city
 
         try:
             sample_map = self.sample_map_dict[item_name]
@@ -95,6 +128,9 @@ class TcpDumpRegionalGroupCountParser(object):
             sample_map = self.sample_map_dict[item_name] = dict()
 
         time = strptime(m.group('time'))
+        if time < self.last_time:
+            self.day += datetime.timedelta(days=1)
+        self.last_time = time
         time = time.replace(second=(time.second/self.interval)*self.interval, microsecond=0)
         dt = datetime.datetime.combine(self.day, time)
 
@@ -109,9 +145,7 @@ class TcpDumpRegionalGroupCountParser(object):
 class TcpDumpLogParser(LogParser):
     def parse_file(self, filepath):
         filename = os.path.basename(filepath)
-        dimension = filename.strip('.log').split('_')
-
-        parser = TcpDumpGroupCountParser()
+        parser = TcpDumpRegionalGroupCountParser()
 
         with open(filepath, 'r') as f:
             ln = 0
@@ -125,11 +159,13 @@ class TcpDumpLogParser(LogParser):
                     sys.stderr.write('ERROR: %s\n%s\n' % (e.message, traceback.format_exc()))
                     logger.error("Parse error on %s(%d): %s", filepath, ln, e.message)
 
-        series_map = SeriesMap(dimension, unit='count')
+        series_map = SeriesMap([], unit='count')
         for k, v in parser.sample_map_dict.iteritems():
             series = series_map[k]
             for dt, sample in v.iteritems():
                 series.append(dt, sample)
 
-        return series_map.values()
+        series_to_return = sorted(series_map.values(), key=lambda s: len(s.samples), reverse=True)
+        series_to_return = itertools.islice(series_to_return, 15)
+        return series_to_return
 

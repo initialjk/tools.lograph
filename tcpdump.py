@@ -36,9 +36,8 @@ def main():
 
         series_list = list(data.filter(lambda s: True))
         if series_list:
-            title = basename
             try:
-                plot_series(format_title(title), series_list).savefig("%s.png" % title, bbox_inches="tight")
+                plot_series('Connection reset count', series_list).savefig("%s.png" % basename, bbox_inches="tight")
             except ValueError as e:
                 sys.stderr.writelines([traceback.format_exc(), '\n'])
                 logger.error("Can't wrote figure for '%s': %s", title, e)
