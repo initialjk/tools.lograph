@@ -1,13 +1,17 @@
 import random
-from collections import Counter, deque
+import time
+import logging
+from collections import Counter
+from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker
 from matplotlib.dates import DateFormatter, HourLocator
 from numpy import arange
 
-# These are the "Tableau 20" colors as RGB.
-from lograph.parse import MeanSample
+from lograph.parse import MeanSample, get_period_of_series_list
+
+logger = logging.getLogger(__name__)
 
 tableau20 = [((31, 119, 180), (174, 199, 232)),
              ((255, 127, 14), (255, 187, 120)),
@@ -23,12 +27,20 @@ tableau20 = [((31, 119, 180), (174, 199, 232)),
 # Scale the RGB values to the [0, 1] range, which is the format matplotlib accepts.
 tableau20 = map(lambda y: map(lambda x: (x[0] / 255., x[1] / 255., x[2] / 255.), y), tableau20)
 
+class UnitOption(object):
+    def __init__(self, grid=None, scale=None, scope=None):
+        self.grid = grid
+        self.scale = scale
+        self.scope = scope
 
-class RightAdditivePlot:
-    def __init__(self, figsize):
+
+class RightAdditiveDatePlot(object):
+    def __init__(self, figsize, dpi=None):
         self.axes = {}
         self.arts = []
-        self.fig, self.pax = plt.subplots(figsize=figsize)
+        self.bottom_for_stack = defaultdict(lambda: 0)
+        self.stack_history = defaultdict(lambda: [])
+        self.fig, self.pax = plt.subplots(figsize=figsize, dpi=dpi)
 
         self.pax.spines["top"].set_visible(False)
         self.pax.spines["bottom"].set_visible(False)
@@ -49,6 +61,7 @@ class RightAdditivePlot:
 
         ax = self.axes[unit] = self.pax if len(self.axes) == 0 else self.pax.twinx()
         ax.set_ylabel(unit)
+        ax.xaxis_date()
 
         ax_count = len(self.axes)
         if ax_count > 2:
@@ -84,6 +97,15 @@ class RightAdditivePlot:
                                 list(getattr(s, 'min', s.value) for s in series.samples),
                                 list(getattr(s, 'max', s.value) for s in series.samples),
                                 facecolor=kwargs.get('color'), edgecolor='none', alpha=0.5)
+        elif series.graph_hint == 'stacked':
+            #  logger.debug("Print series %s on: %s", series.dimension, ', '.join("%s-%s" % (k, self.bottom_for_stack[time.mktime(k.timetuple())]) for k in keys))
+            art = ax.bar(keys, values,
+                         bottom=list(self.bottom_for_stack[time.mktime(k.timetuple())] for k in keys),
+                         **draw_args)
+            for s in series.samples:
+                self.bottom_for_stack[time.mktime(s.key.timetuple())] += s.value
+                self.stack_history[time.mktime(s.key.timetuple())].append("%d (%s)" % (s.value, series.dimension[0]))
+
         else:
             draw_args.setdefault('marker', '.')
             art = ax.scatter(keys, values, **draw_args)
@@ -128,27 +150,26 @@ def get_default_color(series, rank=None):
     else:
         return random.randrange(1, 256) / 255., random.randrange(1, 256) / 255., random.randrange(1, 256) / 255.
 
+def calculate_fig_width(start_date, end_date, width_per_day):
+    if end_date and start_date:
+        return ((end_date - start_date).days + 1) * width_per_day
+    else:
+        return width_per_day
 
-def plot_series(title, series_list, figsize=None, scales={}, legend={'loc': 0}):
-    if not figsize:
-        end_date = start_date = None
-        for s in series_list:
-            keys = s.keys()
-            key_first = next(keys, None)
-            if key_first:
-                key_last = next((k for k in deque(keys, maxlen=1)), key_first)
-                if not start_date or start_date > key_first:
-                    start_date = key_first
-                if end_date is None or end_date < key_last:
-                    end_date = key_last
-            else:
-                print("Empty series", title, s.__dict__)
-        if end_date and start_date:
-            figsize = (((end_date - start_date).days + 1) * 20, 14)
-        else:
-            raise ValueError("No data", title, series_list)
+DEFAULT_FIG_WIDTH_PER_DAY = 24
+DEFAULT_FIG_HEIGHT = 16
+def plot_series(title, series_list, figsize=None, unit_options=None, legend=None, draw_options=None, dpi=None):
+    if legend is None:
+        legend = dict(loc=0)
 
-    plot = RightAdditivePlot(figsize=figsize)
+    if draw_options is None:
+        draw_options = dict()
+
+    if figsize is None:
+        start_date, end_date = get_period_of_series_list(series_list)
+        figsize = (calculate_fig_width(start_date, end_date, DEFAULT_FIG_WIDTH_PER_DAY), DEFAULT_FIG_HEIGHT)
+
+    plot = RightAdditiveDatePlot(figsize=figsize, dpi=dpi)
 
     # Preponderance unit first
     all_subordinates_series = list(s for ss in series_list for s in ss.subordinates_series)
@@ -157,16 +178,23 @@ def plot_series(title, series_list, figsize=None, scales={}, legend={'loc': 0}):
     for unit, count in units:
         ax = plot.get_ax(unit)
         ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(si_prefix_func))
-        limits = scales.get(unit) if scales else None
-        if limits:
-            ax.set_ylim(limits)
+        unit_option = unit_options and unit_options.get(unit)
+        if unit_option:
+            unit_option.scope and ax.set_xlim(unit_option.scope)
+            unit_option.scale and ax.set_ylim(unit_option.scale)
+            unit_option.grid and ax.grid(True)
 
-    plot.get_ax(units[0][0]).grid(True)
+    if unit_options is None:
+        plot.get_ax(units[0][0]).grid(True)
 
     for rank, series in enumerate(series_list):
-        plot.draw_series(series, color=get_default_color(series, rank))
+        plot.draw_series(series, color=get_default_color(series, rank), **draw_options)
 
-    plot.legend(loc=0)
+    plot.legend(**legend)
     plot.set_title(title)
+
+    if logger.isEnabledFor(logging.DEBUG):
+        for k, v in plot.stack_history.iteritems():
+            logger.debug("%s: %s", k, v)
 
     return plot
