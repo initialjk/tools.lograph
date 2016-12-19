@@ -42,14 +42,43 @@ def main():
 
     for d in dirs:
         basename = os.path.basename(os.path.abspath(d))
+        pickle_file = os.path.join(os.path.dirname(os.path.abspath(d)), basename + '.pickle')
+        if os.path.isfile(pickle_file):
+            with open(pickle_file, 'rb') as f:
+                data = pickle.load(f)
+        else:
+            data = SeriesSet()
+            data.load(source_path=d, parsers=[TcpDumpLogParser()])
 
-        series_list = list(data.filter(lambda s: True))
-        if series_list:
-            try:
-                plot_series('Connection reset count', series_list).savefig("%s.png" % basename, bbox_inches="tight")
-            except ValueError as e:
-                sys.stderr.writelines([traceback.format_exc(), '\n'])
-                logger.error("Can't wrote figure for '%s': %s", title, e)
+            with open(pickle_file, 'wb') as f:
+                pickle.dump(data, f)
+
+
+        for k, v in data.split_by(map_to_key).iteritems():
+            series_list = list(v.filter(lambda s: True))
+            if series_list:
+                try:
+                    series_list = sorted(series_list, key=lambda s: reduce((lambda r,v: r+v.value), s.samples, 0), reverse=True)
+                    series_list = list(itertools.islice(series_list, 20))
+                    for s in series_list:
+                        s.consolidate()
+                        s.is_continuous = False
+                        s.graph_hint = 'stacked'
+                        for ss in s.samples:
+                            if ss.value > 301:
+                                ss.value = 301
+                        #  s.samples = s.samples[:100]
+
+                    fig_width_px = (60 * 24 * 7) / 0.775  # Extend to figure margin
+                    fit_height_px = 800 / 0.8  # Extend to figure margin
+                    plot = plot_series('Connection reset count', series_list,
+                                       figsize=(float(fig_width_px)/dpi, float(fit_height_px)/dpi), dpi=dpi,
+                                       unit_options=dict(count=UnitOption(True, (0, 300), (k, k + datetime.timedelta(days=7)))),
+                                       draw_options=dict(width=1.0/(24*60) ,edgecolor='none', align='center'))
+                    plot.savefig("%s_%s.png" % (basename, format_week(k)), bbox_inches="tight", dpi=dpi)
+                except ValueError as e:
+                    sys.stderr.writelines([traceback.format_exc(), '\n'])
+                    logger.error("Can't wrote figure for '%s': %s", basename, e)
 
 
 if __name__ == '__main__':
