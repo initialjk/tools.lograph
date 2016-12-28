@@ -30,7 +30,8 @@ setup(
         'Programming Language :: Python :: 2.7',
     ],
     install_requires=[
-        'matplotlib~=1.5.1',
+        'matplotlib>=1.5.1',
+        'geoip2>=2.4.0',
     ],
     tests_require=[
     ],
