@@ -20,15 +20,19 @@ logger = logging.getLogger(__name__)
 parser = OptionParser()
 parser.add_option("-d", "--dpi", dest="dpi", type="int", help="DPI to save", metavar="DPI", default=100)
 
+
 def format_title(s):
     return s.replace('_', ' ') if s else None
+
 
 def format_week(d):
     return "%s-%s" % (d.strftime("%Y%m%d"), (d + datetime.timedelta(days=6)).strftime("%Y%m%d"))
 
+
 def map_to_key(s):
     if isinstance(s.key, datetime.datetime):
         return s.key.date() - datetime.timedelta(days=s.key.isoweekday()-1)
+
 
 def main():
     (options, args) = parser.parse_args()
@@ -52,7 +56,6 @@ def main():
 
             with open(pickle_file, 'wb') as f:
                 pickle.dump(data, f)
-
 
         for k, v in data.split_by(map_to_key).iteritems():
             series_list = list(v.filter(lambda s: True))
